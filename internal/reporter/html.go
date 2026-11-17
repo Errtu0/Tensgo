@@ -53,17 +53,17 @@ const htmlTemplate = `<!DOCTYPE html>
 <title>tensgo Load Test Report</title>
 <style>
   :root {
-    --bg: #0B0C0E;
-    --surface: #14161A;
-    --surface-2: #1B1E24;
-    --border: #262A33;
-    --text: #F3F4F6;
-    --muted: #9CA3AF;
-    --accent: #8B5CF6;
-    --green: #10B981;
-    --yellow: #F59E0B;
-    --red: #EF4444;
-    --cyan: #06B6D4;
+    --bg: #0B0D0C;
+    --surface: #131614;
+    --surface-2: #1A1E1B;
+    --border: #2A2E2B;
+    --text: #ECEAE6;
+    --muted: #6C7075;
+    --accent: #DE8B4B;
+    --green: #6B8E7A;
+    --yellow: #C89B54;
+    --red: #C85A48;
+    --cyan: #DE8B4B;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -99,16 +99,16 @@ const htmlTemplate = `<!DOCTYPE html>
   }
   .brand-pill {
     background: var(--accent);
-    color: #fff;
+    color: #0B0D0C;
     padding: 3px 10px;
     border-radius: 6px;
     font-size: 12px;
     letter-spacing: 0.08em;
   }
   .method-pill {
-    background: rgba(6, 182, 212, 0.14);
-    color: var(--cyan);
-    border: 1px solid rgba(6, 182, 212, 0.35);
+    background: rgba(222, 139, 75, 0.14);
+    color: var(--accent);
+    border: 1px solid rgba(222, 139, 75, 0.35);
     padding: 2px 10px;
     border-radius: 6px;
     font-size: 12px;
@@ -416,4 +416,16 @@ func GenerateHTMLReport(path string, cfg engine.Config, s metrics.Summary, viola
 		return fmt.Errorf("render html report: %w", err)
 	}
 	return nil
+}
+
+// GenerateHTMLSummaryReport writes a standalone Larch-themed HTML report from a generic Summary.
+func GenerateHTMLSummaryReport(path, title, subtitle string, s metrics.Summary) error {
+	cfg := engine.Config{
+		URL:         subtitle,
+		Method:      title,
+		Concurrency: 1,
+		Duration:    s.TotalDuration,
+		Timeout:     5 * time.Second,
+	}
+	return GenerateHTMLReport(path, cfg, s, nil, false)
 }

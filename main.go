@@ -10,6 +10,7 @@ import (
 	"github.com/Errtu0/tensgo/internal/engine"
 	"github.com/Errtu0/tensgo/internal/metrics"
 	"github.com/Errtu0/tensgo/internal/reporter"
+	"github.com/Errtu0/tensgo/internal/tui"
 )
 
 type headerFlag map[string]string
@@ -42,7 +43,15 @@ func isInteractiveTerminal() bool {
 }
 
 func main() {
-	url := flag.String("u", "", "Target URL to load test (required)")
+	if len(os.Args) == 1 {
+		if err := tui.RunMainMenu(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	url := flag.String("u", "", "Target URL to load test (required unless --openapi is set)")
 	method := flag.String("m", "GET", "HTTP method")
 	body := flag.String("b", "", "Request body")
 	concurrency := flag.Int("c", 10, "Number of concurrent workers")
@@ -52,15 +61,42 @@ func main() {
 	maxP95 := flag.Duration("max-p95", 0, "CI/CD threshold: maximum allowed P95 latency (e.g. 300ms)")
 	maxErrorRate := flag.Float64("max-error-rate", -1, "CI/CD threshold: maximum allowed error rate in percent (e.g. 1.0)")
 	htmlPath := flag.String("html", "", "Write standalone dark-mode HTML report to file (e.g. report.html)")
+	openapiSource := flag.String("openapi", "", "OpenAPI/Swagger JSON URL or file path to scan and benchmark")
+	token := flag.String("token", "", "Authorization header value for OpenAPI scan (e.g. 'Bearer xyz')")
+	scenarioPath := flag.String("scenario", "", "Path to YAML scenario file (e.g. ./tensgo.yaml)")
+	showVersion := flag.Bool("version", false, "Print tensgo version")
+	showVersionShort := flag.Bool("v", false, "Print tensgo version")
 
 	headers := make(headerFlag)
 	flag.Var(headers, "H", "HTTP header in 'Key: Value' format (can be repeated)")
 
 	flag.Parse()
 
+	if *showVersion || *showVersionShort {
+		fmt.Printf("tensgo %s (by Larch Studios)\n", tui.Version)
+		return
+	}
+
+	if strings.TrimSpace(*scenarioPath) != "" {
+		if err := tui.RunScenarioFile(*scenarioPath, *noTUI); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if strings.TrimSpace(*openapiSource) != "" {
+		if err := tui.RunOpenAPIPicker(*openapiSource, *token, *concurrency, *duration, *timeout); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if strings.TrimSpace(*url) == "" {
-		fmt.Fprintln(os.Stderr, "Error: target URL (-u) is required.")
+		fmt.Fprintln(os.Stderr, "Error: target URL (-u) or --openapi is required.")
 		fmt.Fprintln(os.Stderr, `Usage: tensgo -u https://example.com [-m POST] [-H "Content-Type: application/json"] [-b '{"ok":true}'] [-c 10] [-d 10s] [-t 5s] [--max-p95 300ms] [--max-error-rate 1.0] [--html report.html] [--no-tui]`)
+		fmt.Fprintln(os.Stderr, `   or: tensgo --openapi http://localhost:5001/openapi.json [--token "Bearer ..."] [-c 10] [-d 10s]`)
 		flag.PrintDefaults()
 		os.Exit(1)
 	}

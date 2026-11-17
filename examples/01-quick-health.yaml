@@ -1,0 +1,8 @@
+name: "Quick Health High-RPS Benchmark"
+base_url: "http://localhost:8080"
+vus: 50
+duration: "10s"
+steps:
+  - name: "Health Check"
+    method: "GET"
+    path: "/health"

@@ -1,0 +1,26 @@
+name: "Authenticated Checkout Flow"
+base_url: "http://localhost:8080"
+vus: 20
+duration: "15s"
+steps:
+  - name: "Login"
+    method: "POST"
+    path: "/api/login"
+    body:
+      email: "demo@larch.dev"
+      password: "secret"
+    extract:
+      token: "$.token"
+  - name: "Fetch Profile"
+    method: "GET"
+    path: "/api/profile"
+    headers:
+      Authorization: "Bearer {{token}}"
+  - name: "Create Order"
+    method: "POST"
+    path: "/api/orders"
+    headers:
+      Authorization: "Bearer {{token}}"
+    body:
+      item: "tensgo-pro"
+      quantity: 1

@@ -1,0 +1,19 @@
+name: "Authenticated User Workflow"
+base_url: "http://localhost:5001"
+vus: 20
+duration: "15s"
+steps:
+  - name: "Login"
+    method: "POST"
+    path: "/api/v1/auth/login"
+    body:
+      email: "dev@example.com"
+      password: "Y451n542."
+    extract:
+      # Alternative JSONPath examples: $.token or $.data.accessToken
+      token: "$.data.accessToken"
+  - name: "Fetch Profile"
+    method: "GET"
+    path: "/api/v1/auth/me"
+    headers:
+      Authorization: "Bearer {{token}}"

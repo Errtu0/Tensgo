@@ -1,0 +1,15 @@
+name: "Webhook JSON Burst"
+base_url: "http://localhost:8080"
+vus: 30
+duration: "10s"
+timeout: "3s"
+steps:
+  - name: "Deliver Webhook Event"
+    method: "POST"
+    path: "/echo"
+    headers:
+      X-Webhook-Source: "tensgo"
+    body:
+      event: "invoice.paid"
+      amount: 149.90
+      currency: "USD"

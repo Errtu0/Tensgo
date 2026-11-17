@@ -1,0 +1,24 @@
+name: "Microservices Fanout Journey"
+base_url: "http://localhost:8080"
+vus: 15
+duration: "15s"
+steps:
+  - name: "Gateway Health"
+    method: "GET"
+    path: "/health"
+  - name: "Auth Service"
+    method: "POST"
+    path: "/api/login"
+    body:
+      email: "service@larch.dev"
+      password: "secret"
+    extract:
+      token: "$.token"
+  - name: "User Service"
+    method: "GET"
+    path: "/api/profile"
+    headers:
+      Authorization: "Bearer {{token}}"
+  - name: "Inventory Latency"
+    method: "GET"
+    path: "/slow"

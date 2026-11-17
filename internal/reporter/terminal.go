@@ -15,20 +15,20 @@ import (
 // RenderTerminalReport prints a styled Lipgloss terminal report for the load test.
 func RenderTerminalReport(cfg engine.Config, s metrics.Summary, violations []string, hasThresholds bool) {
 	var (
-		colorBorder  = lipgloss.Color("#374151")
-		colorMuted   = lipgloss.Color("#9CA3AF")
-		colorText    = lipgloss.Color("#F3F4F6")
-		colorAccent  = lipgloss.Color("#8B5CF6")
-		colorGreen   = lipgloss.Color("#10B981")
-		colorYellow  = lipgloss.Color("#F59E0B")
-		colorRed     = lipgloss.Color("#EF4444")
-		colorCyan    = lipgloss.Color("#06B6D4")
-		colorBadgeBg = lipgloss.Color("#1F2937")
+		colorBorder  = lipgloss.Color("#6C7075")
+		colorMuted   = lipgloss.Color("#6C7075")
+		colorText    = lipgloss.Color("#ECEAE6")
+		colorAccent  = lipgloss.Color("#DE8B4B")
+		colorGreen   = lipgloss.Color("#6B8E7A")
+		colorYellow  = lipgloss.Color("#DE8B4B")
+		colorRed     = lipgloss.Color("#D9534F")
+		colorCyan    = lipgloss.Color("#DE8B4B")
+		colorBadgeBg = lipgloss.Color("#0B0D0C")
 	)
 
 	brandBadge := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")).
+		Foreground(lipgloss.Color("#0B0D0C")).
 		Background(colorAccent).
 		Padding(0, 1).
 		Render("TENSGO")

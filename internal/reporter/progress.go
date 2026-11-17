@@ -36,10 +36,10 @@ type progressModel struct {
 func newProgressModel(cfg engine.Config, completed *atomic.Int64) progressModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#A78BFA"))
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#DE8B4B"))
 
 	prog := progress.New(
-		progress.WithScaledGradient("#7C3AED", "#10B981"),
+		progress.WithScaledGradient("#DE8B4B", "#6B8E7A"),
 		progress.WithWidth(44),
 	)
 
@@ -115,12 +115,12 @@ func (m progressModel) View() string {
 		elapsed = m.cfg.Duration
 	}
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F3F4F6"))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF"))
-	countStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399"))
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ECEAE6"))
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7075"))
+	countStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#6B8E7A"))
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#374151")).
+		BorderForeground(lipgloss.Color("#6C7075")).
 		Padding(1, 2)
 
 	var b strings.Builder

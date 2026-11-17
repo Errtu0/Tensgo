@@ -1,0 +1,100 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "tensgo Local Mock API",
+    "version": "0.2.0"
+  },
+  "servers": [
+    { "url": "http://localhost:8080" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Immediate health check",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/slow": {
+      "get": {
+        "summary": "Simulated slow endpoint (50-150ms)",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/echo": {
+      "post": {
+        "summary": "Echo JSON payload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": { "type": "string", "example": "hello tensgo" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/login": {
+      "post": {
+        "summary": "Authenticate user and issue token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Token issued" } }
+      }
+    },
+    "/api/profile": {
+      "get": {
+        "summary": "Fetch authenticated user profile",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Profile" }, "401": { "description": "Unauthorized" } }
+      }
+    },
+    "/api/orders": {
+      "post": {
+        "summary": "Create order",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "item": { "type": "string", "example": "tensgo-pro" },
+                  "quantity": { "type": "integer", "example": 1 }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      }
+    }
+  }
+}
