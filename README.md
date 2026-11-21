@@ -156,3 +156,5 @@ tensgo -u http://localhost:8080/health \
 ## Contributing & License
 
 Contributions, issues, and feature requests are welcome! Released under the [MIT License](./LICENSE) — terminal demos can be regenerated with `vhs docs/tapes/*.tape`.
+
+Questions, feedback, or collaborations? Reach out at [hello@tensgo.dev](mailto:hello@tensgo.dev).

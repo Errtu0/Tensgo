@@ -11,7 +11,7 @@
 
 If you discover a security vulnerability in `tensgo` (such as unsafe parsing, unbounded memory consumption, or credential leakage), please **do not** open a public GitHub issue.
 
-Instead, report it privately via GitHub Security Advisories on the `Errtu0/tensgo` repository and include:
+Instead, report it privately via GitHub Security Advisories on the `Errtu0/tensgo` repository or email us directly at [hello@tensgo.dev](mailto:hello@tensgo.dev), and include:
 1. A clear description of the issue and affected component.
 2. Steps or a minimal proof-of-concept to reproduce it.
 3. The `tensgo --version` output and operating system details.
