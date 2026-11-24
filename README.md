@@ -3,7 +3,7 @@
 **Autonomous API Stress Testing & Bottleneck Discovery Engine** — *by Larch Studios*
 
 [![Version](https://img.shields.io/badge/version-v0.3.0-DE8B4B?style=flat-square)](https://github.com/Errtu0/tensgo/releases)
-[![Go](https://img.shields.io/badge/go-1.27.4-6B8E7A?style=flat-square)](https://go.dev/)
+[![Go](https://img.shields.io/badge/go-1.24+-6B8E7A?style=flat-square)](https://go.dev/)
 [![codecov](https://codecov.io/gh/Errtu0/tensgo/branch/main/graph/badge.svg)](https://codecov.io/gh/Errtu0/tensgo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-ECEAE6?style=flat-square)](./LICENSE)
 
@@ -190,6 +190,35 @@ tensgo --scenario ./examples/stateful-crud-assertions.yaml \
   --max-p95-regression 15% \
   --output-format json,junit,markdown \
   --github-summary
+```
+
+### Storing & Updating Baselines in CI
+
+To prevent missing-baseline errors or false positives across pull requests, persist `tensgo-reports/tensgo-report.json` with `actions/cache` — restoring the `main` branch baseline on `pull_request` runs and saving a fresh baseline on merges to `main`:
+
+```yaml
+- name: Restore performance baseline
+  id: baseline-cache
+  uses: actions/cache@v4
+  with:
+    path: tensgo-reports/baseline.json
+    key: tensgo-baseline-${{ github.ref_name }}-${{ github.sha }}
+    restore-keys: |
+      tensgo-baseline-main-
+
+- name: Run load test with baseline regression gate
+  run: |
+    BASELINE_ARGS=""
+    if [ -f tensgo-reports/baseline.json ]; then
+      BASELINE_ARGS="--baseline tensgo-reports/baseline.json --max-p95-regression 15% --max-rps-drop 20%"
+    fi
+    tensgo --scenario ./examples/stateful-crud-assertions.yaml \
+      --no-tui --max-p95 250ms --max-error-rate 0.5 \
+      $BASELINE_ARGS --output-format json,junit,markdown --github-summary
+
+- name: Update baseline on main branch
+  if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  run: cp tensgo-reports/tensgo-report.json tensgo-reports/baseline.json
 ```
 
 ---
