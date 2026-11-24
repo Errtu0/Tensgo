@@ -49,6 +49,7 @@ homebrew_casks:
   - name: tensgo
     binaries:
       - tensgo
+    skip_upload: "{{ if not .Env.HOMEBREW_TAP_GITHUB_TOKEN }}true{{ end }}"
     repository:
       owner: Errtu0
       name: homebrew-tap
@@ -58,6 +59,7 @@ homebrew_casks:
 
 scoops:
   - name: tensgo
+    skip_upload: "{{ if not .Env.HOMEBREW_TAP_GITHUB_TOKEN }}true{{ end }}"
     repository:
       owner: Errtu0
       name: scoop-bucket

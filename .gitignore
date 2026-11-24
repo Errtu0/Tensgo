@@ -13,6 +13,9 @@ tensgo-reports/
 tensgo-report-*.html
 report*.html
 tensgo.yaml
+coverage.out
+*.cov
+\$cov
 
 # OS & IDE files
 .DS_Store
