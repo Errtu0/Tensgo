@@ -32,6 +32,7 @@ type menuItem struct {
 type mainMenuModel struct {
 	items    []menuItem
 	cursor   int
+	width    int
 	chosen   menuChoice
 	quitting bool
 }
@@ -39,6 +40,7 @@ type mainMenuModel struct {
 func newMainMenuModel() mainMenuModel {
 	return mainMenuModel{
 		chosen: choiceNone,
+		width:  reporter.TerminalWidth(),
 		items: []menuItem{
 			{
 				title: "Quick Stress Test",
@@ -68,6 +70,11 @@ func (m mainMenuModel) Init() tea.Cmd { return nil }
 
 func (m mainMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
@@ -114,6 +121,7 @@ func (m mainMenuModel) View() string {
 	)
 	b.WriteString(header + "\n\n")
 
+	boxW := reporter.ClampBoxWidth(m.width, 78, 40)
 	for i, item := range m.items {
 		cursor := "  "
 		title := TextStyle.Render(item.title)
@@ -129,11 +137,11 @@ func (m mainMenuModel) View() string {
 			Padding(0, 1)
 
 		b.WriteString(fmt.Sprintf("%s%s  %s\n", cursor, title, badgeStyle.Render(item.badge)))
-		b.WriteString(fmt.Sprintf("    %s\n\n", MutedStyle.Render(item.desc)))
+		b.WriteString(fmt.Sprintf("    %s\n\n", MutedStyle.Render(reporter.TruncateRunes(item.desc, max(20, boxW-10)))))
 	}
 
 	b.WriteString(HintStyle.Render("↑/↓ or j/k: Navigate  •  Enter: Select  •  q: Quit"))
-	return "\n" + BoxStyle.Width(78).Render(b.String()) + "\n"
+	return "\n" + BoxStyle.Width(boxW).Render(b.String()) + "\n"
 }
 
 // RunMainMenu launches the interactive Bubble Tea main control center.

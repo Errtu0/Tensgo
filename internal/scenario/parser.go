@@ -20,14 +20,35 @@ type Scenario struct {
 	Steps    []Step `yaml:"steps"`
 }
 
-// Step describes a single HTTP action and optional variable extractions.
+// AssertConfig defines declarative response validation rules for a scenario step.
+type AssertConfig struct {
+	Status       any               `yaml:"status,omitempty"`
+	JSON         map[string]string `yaml:"json,omitempty"`
+	Headers      map[string]string `yaml:"headers,omitempty"`
+	BodyContains string            `yaml:"body_contains,omitempty"`
+}
+
+// Step describes a single HTTP action and optional variable extractions and assertions.
 type Step struct {
-	Name    string            `yaml:"name"`
-	Method  string            `yaml:"method"`
-	Path    string            `yaml:"path"`
-	Headers map[string]string `yaml:"headers,omitempty"`
-	Body    any               `yaml:"body,omitempty"`
-	Extract map[string]string `yaml:"extract,omitempty"`
+	Name             string            `yaml:"name"`
+	Method           string            `yaml:"method"`
+	Path             string            `yaml:"path"`
+	Headers          map[string]string `yaml:"headers,omitempty"`
+	Body             any               `yaml:"body,omitempty"`
+	Extract          map[string]string `yaml:"extract,omitempty"`
+	Assert           *AssertConfig     `yaml:"assert,omitempty"`
+	ExpectedStatuses []int             `yaml:"-"`
+}
+
+// HasAssertions reports whether the step has any response assertion rules configured.
+func (s Step) HasAssertions() bool {
+	if s.Assert == nil {
+		return false
+	}
+	return len(s.ExpectedStatuses) > 0 ||
+		len(s.Assert.JSON) > 0 ||
+		len(s.Assert.Headers) > 0 ||
+		s.Assert.BodyContains != ""
 }
 
 // ParsedConfig holds validated scenario parameters and parsed durations.
@@ -104,6 +125,13 @@ func ParseFile(path string) (*ParsedConfig, error) {
 		if sc.Steps[i].Name == "" {
 			sc.Steps[i].Name = fmt.Sprintf("Step %d", i+1)
 		}
+		if sc.Steps[i].Assert != nil && sc.Steps[i].Assert.Status != nil {
+			statuses, err := parseExpectedStatuses(sc.Steps[i].Assert.Status)
+			if err != nil {
+				return nil, fmt.Errorf("step %d (%s) invalid assert.status: %w", i+1, sc.Steps[i].Name, err)
+			}
+			sc.Steps[i].ExpectedStatuses = statuses
+		}
 	}
 
 	return &ParsedConfig{
@@ -111,6 +139,36 @@ func ParseFile(path string) (*ParsedConfig, error) {
 		Duration: dur,
 		Timeout:  timeout,
 	}, nil
+}
+
+func parseExpectedStatuses(raw any) ([]int, error) {
+	switch v := raw.(type) {
+	case int:
+		return []int{v}, nil
+	case int64:
+		return []int{int(v)}, nil
+	case float64:
+		return []int{int(v)}, nil
+	case []any:
+		out := make([]int, 0, len(v))
+		for _, item := range v {
+			n, ok := item.(int)
+			if !ok {
+				if f, okF := item.(float64); okF {
+					n = int(f)
+				} else {
+					return nil, fmt.Errorf("expected integer status code, got %T", item)
+				}
+			}
+			out = append(out, n)
+		}
+		if len(out) == 0 {
+			return nil, fmt.Errorf("status list cannot be empty")
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected int or list of ints, got %T", raw)
+	}
 }
 
 // DefaultTemplateYAML returns a starter tensgo.yaml scenario template.

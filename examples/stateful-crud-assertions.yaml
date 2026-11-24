@@ -1,0 +1,47 @@
+name: "Stateful CRUD with Assertions"
+base_url: "http://localhost:8080"
+vus: 10
+duration: "10s"
+steps:
+  - name: "Login"
+    method: "POST"
+    path: "/api/login"
+    body:
+      email: "dev@example.com"
+      password: "secret"
+    extract:
+      auth_token: "$.token"
+      content_type: "header:Content-Type"
+    assert:
+      status: 200
+      json:
+        "$.token": "!empty"
+      headers:
+        "Content-Type": "contains:application/json"
+
+  - name: "Fetch Profile"
+    method: "GET"
+    path: "/api/profile"
+    headers:
+      Authorization: "Bearer {{auth_token}}"
+    assert:
+      status: 200
+      json:
+        "$.role": "admin"
+
+  - name: "Create Order"
+    method: "POST"
+    path: "/api/orders"
+    headers:
+      Authorization: "Bearer {{auth_token}}"
+    body:
+      item: "tensgo-pro-{{random_int}}"
+      timestamp: "{{timestamp}}"
+    extract:
+      order_id: "$.order_id"
+    assert:
+      status: [200, 201]
+      json:
+        "$.status": "created"
+        "$.order_id": "!empty"
+      body_contains: "order_id"

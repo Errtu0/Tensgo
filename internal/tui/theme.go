@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Errtu0/tensgo/internal/reporter"
 )
 
 // sanitizePasteMsg strips CR/LF from pasted key events so multi-line pastes
@@ -27,7 +29,7 @@ func sanitizePasteMsg(msg tea.KeyMsg) (tea.KeyMsg, bool) {
 }
 
 // Version is the current release version of tensgo.
-const Version = "v0.2.0"
+const Version = "v0.3.0"
 
 // Larch Studios color palette.
 const (
@@ -107,16 +109,22 @@ var (
 )
 
 type returnPromptModel struct {
-	saveHTML  func(path string) error
-	savedMsg  string
-	errMsg    string
-	quit      bool
+	saveHTML func(path string) error
+	savedMsg string
+	errMsg   string
+	width    int
+	quit     bool
 }
 
 func (m returnPromptModel) Init() tea.Cmd { return nil }
 
 func (m returnPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -154,17 +162,19 @@ func (m returnPromptModel) View() string {
 		line += "\n" + ErrorStyle.Render("✗ "+m.errMsg)
 	}
 
+	boxW := reporter.ClampBoxWidth(m.width, 84, 40)
 	prompt := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorMuted).
 		Padding(0, 2).
+		Width(boxW).
 		Render(line)
 	return prompt + "\n"
 }
 
 // waitForMenuReturn pauses after a TUI test report until the user chooses to save HTML, return, or quit.
 func waitForMenuReturn(saveHTML func(path string) error) bool {
-	p := tea.NewProgram(returnPromptModel{saveHTML: saveHTML})
+	p := tea.NewProgram(returnPromptModel{saveHTML: saveHTML, width: reporter.TerminalWidth()})
 	finalModel, err := p.Run()
 	if err != nil {
 		return false

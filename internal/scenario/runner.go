@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,21 +19,24 @@ import (
 
 // StepResult holds aggregated metrics for a single scenario step.
 type StepResult struct {
-	Name            string
-	Method          string
-	Path            string
-	Summary         metrics.Summary
-	ExtractWarnings map[string]int64
+	Name              string
+	Method            string
+	Path              string
+	Summary           metrics.Summary
+	ExtractWarnings   map[string]int64
+	AssertionFailures int64
+	FailureReasons    map[string]int64
 }
 
 // Report contains overall and per-step metrics for a scenario run.
 type Report struct {
-	Name          string
-	BaseURL       string
-	VUs           int
-	TotalDuration time.Duration
-	Overall       metrics.Summary
-	StepResults   []StepResult
+	Name              string
+	BaseURL           string
+	VUs               int
+	TotalDuration     time.Duration
+	Overall           metrics.Summary
+	StepResults       []StepResult
+	AssertionFailures int64
 }
 
 // Run executes the multi-step scenario across VUs concurrently for the configured duration.
@@ -52,14 +58,17 @@ func Run(cfg *ParsedConfig, completed *atomic.Int64) Report {
 	defer cancel()
 
 	var (
-		mu              sync.Mutex
-		allResults      []metrics.Result
-		stepBuckets     = make([][]metrics.Result, len(sc.Steps))
-		extractWarnings = make([]map[string]int64, len(sc.Steps))
-		wg              sync.WaitGroup
+		mu                sync.Mutex
+		allResults        []metrics.Result
+		stepBuckets       = make([][]metrics.Result, len(sc.Steps))
+		extractWarnings   = make([]map[string]int64, len(sc.Steps))
+		assertionFailures = make([]int64, len(sc.Steps))
+		failureReasons    = make([]map[string]int64, len(sc.Steps))
+		wg                sync.WaitGroup
 	)
 	for i := range extractWarnings {
 		extractWarnings[i] = make(map[string]int64)
+		failureReasons[i] = make(map[string]int64)
 	}
 
 	testStart := time.Now()
@@ -142,52 +151,68 @@ func Run(cfg *ParsedConfig, completed *atomic.Int64) Report {
 						continue
 					}
 
+					needBody := len(step.Extract) > 0 || step.HasAssertions()
 					var respBytes []byte
-					if len(step.Extract) > 0 && resp.StatusCode < 400 {
+					if needBody {
 						respBytes, _ = io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 					} else {
 						_, _ = io.Copy(io.Discard, resp.Body)
 					}
 					_ = resp.Body.Close()
 
+					var parsedJSON any
+					hasJSON := false
+					if needBody && len(respBytes) > 0 {
+						if err := json.Unmarshal(respBytes, &parsedJSON); err == nil {
+							hasJSON = true
+						}
+					}
+
+					assertErr := evaluateAssertions(step, resp.StatusCode, resp.Header, respBytes, parsedJSON, hasJSON)
+
 					res := metrics.Result{
 						Duration:   elapsed,
 						StatusCode: resp.StatusCode,
 					}
+					if assertErr != "" {
+						res.Err = fmt.Errorf("assertion failed: %s", assertErr)
+					}
+
 					mu.Lock()
 					allResults = append(allResults, res)
 					stepBuckets[stepIdx] = append(stepBuckets[stepIdx], res)
+					if assertErr != "" {
+						assertionFailures[stepIdx]++
+						failureReasons[stepIdx][assertErr]++
+					}
 					mu.Unlock()
 					if completed != nil {
 						completed.Add(1)
 					}
 
-					if resp.StatusCode >= 400 && len(step.Extract) > 0 {
+					if (resp.StatusCode >= 400 || assertErr != "") && len(step.Extract) > 0 {
 						break
 					}
 
-					if len(step.Extract) > 0 && len(respBytes) > 0 {
-						var parsed any
-						if err := json.Unmarshal(respBytes, &parsed); err == nil {
-							for varName, jsonPath := range step.Extract {
-								val := extractJSONPath(parsed, jsonPath)
-								if val == "" && isTokenVarName(varName) {
-									val = extractTokenRecursive(parsed)
-								}
-								if val != "" {
-									vars[varName] = val
-								} else {
-									mu.Lock()
-									extractWarnings[stepIdx][varName]++
-									mu.Unlock()
+					if len(step.Extract) > 0 {
+						for varName, expr := range step.Extract {
+							var extracted string
+							if strings.HasPrefix(strings.ToLower(strings.TrimSpace(expr)), "header:") {
+								hdrName := strings.TrimSpace(expr[len("header:"):])
+								extracted = resp.Header.Get(hdrName)
+							} else if hasJSON {
+								extracted = extractJSONPath(parsedJSON, expr)
+								if extracted == "" && isTokenVarName(varName) {
+									extracted = extractTokenRecursive(parsedJSON)
 								}
 							}
-						} else {
-							mu.Lock()
-							for varName := range step.Extract {
+							if extracted != "" {
+								vars[varName] = extracted
+							} else {
+								mu.Lock()
 								extractWarnings[stepIdx][varName]++
+								mu.Unlock()
 							}
-							mu.Unlock()
 						}
 					}
 				}
@@ -198,24 +223,29 @@ func Run(cfg *ParsedConfig, completed *atomic.Int64) Report {
 	wg.Wait()
 	totalDur := time.Since(testStart)
 
+	var totalAssertFails int64
 	stepResults := make([]StepResult, len(sc.Steps))
 	for i, step := range sc.Steps {
+		totalAssertFails += assertionFailures[i]
 		stepResults[i] = StepResult{
-			Name:            step.Name,
-			Method:          step.Method,
-			Path:            step.Path,
-			Summary:         metrics.Calculate(stepBuckets[i], totalDur),
-			ExtractWarnings: extractWarnings[i],
+			Name:              step.Name,
+			Method:            step.Method,
+			Path:              step.Path,
+			Summary:           metrics.Calculate(stepBuckets[i], totalDur),
+			ExtractWarnings:   extractWarnings[i],
+			AssertionFailures: assertionFailures[i],
+			FailureReasons:    failureReasons[i],
 		}
 	}
 
 	return Report{
-		Name:          sc.Name,
-		BaseURL:       sc.BaseURL,
-		VUs:           sc.VUs,
-		TotalDuration: totalDur,
-		Overall:       metrics.Calculate(allResults, totalDur),
-		StepResults:   stepResults,
+		Name:              sc.Name,
+		BaseURL:           sc.BaseURL,
+		VUs:               sc.VUs,
+		TotalDuration:     totalDur,
+		Overall:           metrics.Calculate(allResults, totalDur),
+		StepResults:       stepResults,
+		AssertionFailures: totalAssertFails,
 	}
 }
 
@@ -223,7 +253,59 @@ func interpolate(s string, vars map[string]string) string {
 	for k, v := range vars {
 		s = strings.ReplaceAll(s, "{{"+k+"}}", v)
 	}
+	if strings.Contains(s, "{{random_int}}") {
+		s = strings.ReplaceAll(s, "{{random_int}}", strconv.Itoa(rand.IntN(1_000_000)))
+	}
+	if strings.Contains(s, "{{timestamp}}") {
+		s = strings.ReplaceAll(s, "{{timestamp}}", strconv.FormatInt(time.Now().Unix(), 10))
+	}
 	return s
+}
+
+func evaluateAssertions(step Step, statusCode int, headers http.Header, bodyBytes []byte, parsedJSON any, hasJSON bool) string {
+	if step.Assert == nil {
+		return ""
+	}
+	if len(step.ExpectedStatuses) > 0 && !slices.Contains(step.ExpectedStatuses, statusCode) {
+		return fmt.Sprintf("status: expected %v, got %d", step.ExpectedStatuses, statusCode)
+	}
+	if step.Assert.BodyContains != "" && !strings.Contains(string(bodyBytes), step.Assert.BodyContains) {
+		return fmt.Sprintf("body_contains: missing %q", step.Assert.BodyContains)
+	}
+
+	if len(step.Assert.Headers) > 0 {
+		keys := make([]string, 0, len(step.Assert.Headers))
+		for k := range step.Assert.Headers {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		for _, k := range keys {
+			actual := headers.Get(k)
+			if ok, reason := MatchRule(actual, actual != "", step.Assert.Headers[k]); !ok {
+				return fmt.Sprintf("header %s: %s", k, reason)
+			}
+		}
+	}
+
+	if len(step.Assert.JSON) > 0 {
+		if !hasJSON {
+			return "json: response body is not valid JSON"
+		}
+		keys := make([]string, 0, len(step.Assert.JSON))
+		for k := range step.Assert.JSON {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		for _, jp := range keys {
+			rawVal, exists := EvalJSONPath(parsedJSON, jp)
+			actual := FormatJSONValue(rawVal)
+			if ok, reason := MatchRule(actual, exists, step.Assert.JSON[jp]); !ok {
+				return fmt.Sprintf("json %s: %s", jp, reason)
+			}
+		}
+	}
+
+	return ""
 }
 
 func buildBodyString(body any, vars map[string]string) string {
@@ -262,35 +344,15 @@ func interpolateAny(v any, vars map[string]string) any {
 }
 
 func extractJSONPath(doc any, path string) string {
-	p := strings.TrimSpace(path)
-	p = strings.TrimPrefix(p, "$.")
-	p = strings.TrimPrefix(p, "$")
-	p = strings.TrimPrefix(p, ".")
-	if p == "" {
+	val, ok := EvalJSONPath(doc, path)
+	if !ok {
 		return ""
 	}
-
-	parts := strings.Split(p, ".")
-	current := doc
-	for _, part := range parts {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return ""
-		}
-		val, exists := m[part]
-		if !exists {
-			return ""
-		}
-		current = val
-	}
-
-	switch v := current.(type) {
-	case string:
-		return v
-	case float64, bool, int, int64:
-		return fmt.Sprintf("%v", v)
+	switch val.(type) {
+	case map[string]any, []any:
+		return ""
 	default:
-		return ""
+		return FormatJSONValue(val)
 	}
 }
 

@@ -47,40 +47,56 @@ func RenderComparisonMatrix(results []RouteResult) {
 	cellStyle := lipgloss.NewStyle().Foreground(colorText)
 	mutedStyle := lipgloss.NewStyle().Foreground(colorMuted)
 
-	// Column widths
+	termW := TerminalWidth()
+	boxW := ClampBoxWidth(termW, 130, 56)
+	innerW := boxW - 6
+
+	// Fixed column widths; hide P99 on very narrow terminals (< 95 cols) to prevent border wrap.
+	showP99 := termW >= NarrowBreakpoint
 	const (
-		wEndpoint = 28
-		wMethod   = 8
-		wRPS      = 10
-		wP50      = 10
-		wP95      = 10
-		wP99      = 10
-		wErr      = 9
-		wStatus   = 21
+		wMethod = 6
+		wRPS    = 7
+		wP50    = 8
+		wP95    = 8
+		wP99    = 8
+		wErr    = 7
+		wStatus = 21
 	)
 
-	pad := func(s string, width int) string {
-		if len(s) > width {
-			if width > 3 {
-				return s[:width-3] + "..."
-			}
-			return s[:width]
-		}
-		return s + strings.Repeat(" ", width-len(s))
+	fixed := wMethod + wRPS + wP50 + wP95 + wErr + wStatus + 6*3 // 6 separators " │ "
+	if showP99 {
+		fixed += wP99 + 3
+	}
+	wEndpoint := innerW - fixed
+	if termW >= WideBreakpoint && wEndpoint > 32 {
+		wEndpoint = 32
+	}
+	if wEndpoint < 12 {
+		wEndpoint = 12
 	}
 
-	headerRow := strings.Join([]string{
-		headerStyle.Render(pad("Endpoint", wEndpoint)),
-		headerStyle.Render(pad("Method", wMethod)),
-		headerStyle.Render(pad("RPS", wRPS)),
-		headerStyle.Render(pad("p50", wP50)),
-		headerStyle.Render(pad("p95", wP95)),
-		headerStyle.Render(pad("p99", wP99)),
-		headerStyle.Render(pad("Error %", wErr)),
-		headerStyle.Render(pad("Status", wStatus)),
-	}, " │ ")
+	totalLineW := wEndpoint + fixed
+	if totalLineW > innerW {
+		totalLineW = innerW
+	}
 
-	divider := mutedStyle.Render(strings.Repeat("─", wEndpoint+wMethod+wRPS+wP50+wP95+wP99+wErr+wStatus+21))
+	headerCols := []string{
+		headerStyle.Render(PadRunes("Endpoint", wEndpoint)),
+		headerStyle.Render(PadRunes("Method", wMethod)),
+		headerStyle.Render(PadRunes("RPS", wRPS)),
+		headerStyle.Render(PadRunes("p50", wP50)),
+		headerStyle.Render(PadRunes("p95", wP95)),
+	}
+	if showP99 {
+		headerCols = append(headerCols, headerStyle.Render(PadRunes("p99", wP99)))
+	}
+	headerCols = append(headerCols,
+		headerStyle.Render(PadRunes("Error %", wErr)),
+		headerStyle.Render(PadRunes("Status", wStatus)),
+	)
+
+	headerRow := strings.Join(headerCols, " │ ")
+	divider := mutedStyle.Render(strings.Repeat("─", totalLineW))
 
 	var rows []string
 	rows = append(rows, titleLine, "", headerRow, divider)
@@ -130,23 +146,28 @@ func RenderComparisonMatrix(results []RouteResult) {
 			statusBadge = badgeHealthy
 		}
 
-		row := strings.Join([]string{
-			cellStyle.Render(pad(r.Endpoint, wEndpoint)),
-			lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render(pad(r.Method, wMethod)),
-			cellStyle.Render(pad(fmt.Sprintf("%.1f", r.Summary.RPS), wRPS)),
-			cellStyle.Render(pad(metrics.FormatDuration(r.Summary.P50), wP50)),
-			cellStyle.Render(pad(metrics.FormatDuration(r.Summary.P95), wP95)),
-			cellStyle.Render(pad(metrics.FormatDuration(r.Summary.P99), wP99)),
-			cellStyle.Render(pad(fmt.Sprintf("%.2f%%", errPct), wErr)),
+		rowCols := []string{
+			cellStyle.Render(PadRunes(r.Endpoint, wEndpoint)),
+			lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render(PadRunes(r.Method, wMethod)),
+			cellStyle.Render(PadRunes(fmt.Sprintf("%.1f", r.Summary.RPS), wRPS)),
+			cellStyle.Render(PadRunes(metrics.FormatDuration(r.Summary.P50), wP50)),
+			cellStyle.Render(PadRunes(metrics.FormatDuration(r.Summary.P95), wP95)),
+		}
+		if showP99 {
+			rowCols = append(rowCols, cellStyle.Render(PadRunes(metrics.FormatDuration(r.Summary.P99), wP99)))
+		}
+		rowCols = append(rowCols,
+			cellStyle.Render(PadRunes(fmt.Sprintf("%.2f%%", errPct), wErr)),
 			statusBadge,
-		}, " │ ")
-		rows = append(rows, row)
+		)
+		rows = append(rows, strings.Join(rowCols, " │ "))
 	}
 
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorMuted).
 		Padding(1, 2).
+		Width(boxW).
 		Render(strings.Join(rows, "\n"))
 
 	fmt.Println()

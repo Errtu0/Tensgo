@@ -23,7 +23,9 @@ type Summary struct {
 	StatusCodes   map[int]int
 	TotalDuration time.Duration
 	RPS           float64
+	Avg           time.Duration
 	P50           time.Duration
+	P90           time.Duration
 	P95           time.Duration
 	P99           time.Duration
 	Min           time.Duration
@@ -43,6 +45,7 @@ func Calculate(results []Result, totalDuration time.Duration) Summary {
 		return summary
 	}
 
+	var totalLatency time.Duration
 	durations := make([]time.Duration, 0, total)
 	for _, r := range results {
 		if r.Err != nil {
@@ -56,6 +59,7 @@ func Calculate(results []Result, totalDuration time.Duration) Summary {
 				summary.SuccessCount++
 			}
 		}
+		totalLatency += r.Duration
 		durations = append(durations, r.Duration)
 	}
 
@@ -63,7 +67,9 @@ func Calculate(results []Result, totalDuration time.Duration) Summary {
 
 	summary.Min = durations[0]
 	summary.Max = durations[total-1]
+	summary.Avg = totalLatency / time.Duration(total)
 	summary.P50 = percentile(durations, 50)
+	summary.P90 = percentile(durations, 90)
 	summary.P95 = percentile(durations, 95)
 	summary.P99 = percentile(durations, 99)
 

@@ -1,0 +1,67 @@
+version: 2
+
+project_name: tensgo
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: tensgo
+    main: .
+    binary: tensgo
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/Errtu0/tensgo/internal/tui.Version={{.Tag}}
+
+archives:
+  - id: tensgo-archive
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+homebrew_casks:
+  - name: tensgo
+    binaries:
+      - tensgo
+    repository:
+      owner: Errtu0
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://tensgo.dev
+    description: "Autonomous API Stress Testing & Bottleneck Discovery Engine"
+
+scoops:
+  - name: tensgo
+    repository:
+      owner: Errtu0
+      name: scoop-bucket
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://tensgo.dev
+    description: "Autonomous API Stress Testing & Bottleneck Discovery Engine"
+    license: MIT

@@ -26,6 +26,12 @@ func RenderTerminalReport(cfg engine.Config, s metrics.Summary, violations []str
 		colorBadgeBg = lipgloss.Color("#0B0D0C")
 	)
 
+	termW := TerminalWidth()
+	outerW := ClampBoxWidth(termW, 84, 40)
+	if termW >= WideBreakpoint {
+		outerW = ClampBoxWidth(termW, 88, 40)
+	}
+
 	brandBadge := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#0B0D0C")).
@@ -40,27 +46,35 @@ func RenderTerminalReport(cfg engine.Config, s metrics.Summary, violations []str
 		Padding(0, 1).
 		Render(cfg.Method)
 
+	displayURL := TruncateRunes(cfg.URL, max(16, outerW-20))
 	headerBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorBorder).
 		Padding(1, 2).
-		Width(76).
+		Width(outerW).
 		Render(fmt.Sprintf("%s  %s %s\n%s",
 			brandBadge,
 			methodBadge,
-			lipgloss.NewStyle().Bold(true).Foreground(colorText).Render(cfg.URL),
+			lipgloss.NewStyle().Bold(true).Foreground(colorText).Render(displayURL),
 			lipgloss.NewStyle().Foreground(colorMuted).Render(
 				fmt.Sprintf("Concurrency: %d workers   •   Duration: %s   •   Timeout: %s",
 					cfg.Concurrency, s.TotalDuration.Round(time.Millisecond), cfg.Timeout),
 			),
 		))
 
-	// Summary & Latency side-by-side cards
+	// Summary & Latency cards: side-by-side on wide terminals, stacked vertically on narrow (< 95 cols).
+	stackVertically := termW < NarrowBreakpoint
+	cardW := outerW
+	if !stackVertically {
+		cardW = (outerW - 2) / 2
+		outerW = cardW*2 + 2
+	}
+
 	cardStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorBorder).
 		Padding(1, 2).
-		Width(37)
+		Width(cardW)
 
 	cardTitleStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -101,7 +115,12 @@ func RenderTerminalReport(cfg engine.Config, s metrics.Summary, violations []str
 	}
 	latencyCard := cardStyle.Render(strings.Join(latencyLines, "\n"))
 
-	cardsRow := lipgloss.JoinHorizontal(lipgloss.Top, summaryCard, "  ", latencyCard)
+	var cardsBlock string
+	if stackVertically {
+		cardsBlock = summaryCard + "\n" + latencyCard
+	} else {
+		cardsBlock = lipgloss.JoinHorizontal(lipgloss.Top, summaryCard, "  ", latencyCard)
+	}
 
 	// Status Code Distribution Table
 	var statusLines []string
@@ -140,7 +159,14 @@ func RenderTerminalReport(cfg engine.Config, s metrics.Summary, violations []str
 				Padding(0, 1).
 				Render(fmt.Sprintf("%d", code))
 
-			barWidth := int(pct / 100.0 * 30)
+			maxBar := outerW - 34
+			if maxBar > 30 {
+				maxBar = 30
+			}
+			if maxBar < 6 {
+				maxBar = 6
+			}
+			barWidth := int(pct / 100.0 * float64(maxBar))
 			if barWidth == 0 && count > 0 {
 				barWidth = 1
 			}
@@ -173,12 +199,12 @@ func RenderTerminalReport(cfg engine.Config, s metrics.Summary, violations []str
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorBorder).
 		Padding(1, 2).
-		Width(76).
+		Width(outerW).
 		Render(strings.Join(statusLines, "\n"))
 
 	fmt.Println()
 	fmt.Println(headerBox)
-	fmt.Println(cardsRow)
+	fmt.Println(cardsBlock)
 	fmt.Println(statusBox)
 
 	// Quality Gate / Threshold Box
@@ -213,7 +239,7 @@ func RenderTerminalReport(cfg engine.Config, s metrics.Summary, violations []str
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(gateBorderColor).
 			Padding(0, 2).
-			Width(76).
+			Width(outerW).
 			Render(gateContent)
 
 		fmt.Println(gateBox)

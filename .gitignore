@@ -9,6 +9,7 @@ tensgo
 tensgo.exe
 
 # Generated test reports & local scenarios
+tensgo-reports/
 tensgo-report-*.html
 report*.html
 tensgo.yaml

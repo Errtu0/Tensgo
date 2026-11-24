@@ -47,40 +47,52 @@ func RenderScenarioReport(rep scenario.Report) {
 		)),
 	)
 
+	termW := TerminalWidth()
+	boxW := ClampBoxWidth(termW, 122, 56)
+	innerW := boxW - 6
+
 	const (
-		wStep   = 20
-		wMethod = 7
-		wPath   = 22
-		wStatus = 14
-		wRPS    = 8
-		wP50    = 9
-		wP95    = 9
+		wMethod = 6
+		wStatus = 12
+		wRPS    = 7
+		wP50    = 8
+		wP95    = 8
 		wErr    = 8
 	)
 
-	pad := func(s string, width int) string {
-		r := []rune(s)
-		if len(r) > width {
-			if width > 3 {
-				return string(r[:width-3]) + "..."
-			}
-			return string(r[:width])
+	fixed := wMethod + wStatus + wRPS + wP50 + wP95 + wErr + 7*3 // 7 separators " │ "
+	flex := innerW - fixed
+	if flex < 20 {
+		flex = 20
+	}
+	wStep := flex * 45 / 100
+	wPath := flex - wStep
+	if termW >= WideBreakpoint {
+		if wStep > 22 {
+			wStep = 22
 		}
-		return s + strings.Repeat(" ", width-len(r))
+		if wPath > 26 {
+			wPath = 26
+		}
+	}
+
+	totalLineW := wStep + wPath + fixed
+	if totalLineW > innerW {
+		totalLineW = innerW
 	}
 
 	headerRow := strings.Join([]string{
-		headerStyle.Render(pad("Step", wStep)),
-		headerStyle.Render(pad("Method", wMethod)),
-		headerStyle.Render(pad("Path", wPath)),
-		headerStyle.Render(pad("Status", wStatus)),
-		headerStyle.Render(pad("RPS", wRPS)),
-		headerStyle.Render(pad("p50", wP50)),
-		headerStyle.Render(pad("p95", wP95)),
-		headerStyle.Render(pad("Error %", wErr)),
+		headerStyle.Render(PadRunes("Step", wStep)),
+		headerStyle.Render(PadRunes("Method", wMethod)),
+		headerStyle.Render(PadRunes("Path", wPath)),
+		headerStyle.Render(PadRunes("Status", wStatus)),
+		headerStyle.Render(PadRunes("RPS", wRPS)),
+		headerStyle.Render(PadRunes("p50", wP50)),
+		headerStyle.Render(PadRunes("p95", wP95)),
+		headerStyle.Render(PadRunes("Error %", wErr)),
 	}, " │ ")
 
-	divider := mutedStyle.Render(strings.Repeat("─", wStep+wMethod+wPath+wStatus+wRPS+wP50+wP95+wErr+21))
+	divider := mutedStyle.Render(strings.Repeat("─", totalLineW))
 
 	var rows []string
 	rows = append(rows, titleBlock, "", headerRow, divider)
@@ -100,14 +112,14 @@ func RenderScenarioReport(rep scenario.Report) {
 		statusStyle := lipgloss.NewStyle().Bold(true).Foreground(statusColor)
 
 		row := strings.Join([]string{
-			cellStyle.Render(pad(sr.Name, wStep)),
-			lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render(pad(sr.Method, wMethod)),
-			mutedStyle.Render(pad(sr.Path, wPath)),
-			statusStyle.Render(pad(statusText, wStatus)),
-			cellStyle.Render(pad(fmt.Sprintf("%.1f", sr.Summary.RPS), wRPS)),
-			cellStyle.Render(pad(metrics.FormatDuration(sr.Summary.P50), wP50)),
-			cellStyle.Render(pad(metrics.FormatDuration(sr.Summary.P95), wP95)),
-			errStyle.Render(pad(fmt.Sprintf("%.2f%%", errPct), wErr)),
+			cellStyle.Render(PadRunes(sr.Name, wStep)),
+			lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render(PadRunes(sr.Method, wMethod)),
+			mutedStyle.Render(PadRunes(sr.Path, wPath)),
+			statusStyle.Render(PadRunes(statusText, wStatus)),
+			cellStyle.Render(PadRunes(fmt.Sprintf("%.1f", sr.Summary.RPS), wRPS)),
+			cellStyle.Render(PadRunes(metrics.FormatDuration(sr.Summary.P50), wP50)),
+			cellStyle.Render(PadRunes(metrics.FormatDuration(sr.Summary.P95), wP95)),
+			errStyle.Render(PadRunes(fmt.Sprintf("%.2f%%", errPct), wErr)),
 		}, " │ ")
 		rows = append(rows, row)
 	}
@@ -116,6 +128,7 @@ func RenderScenarioReport(rep scenario.Report) {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorMuted).
 		Padding(1, 2).
+		Width(boxW).
 		Render(strings.Join(rows, "\n"))
 
 	fmt.Println()
@@ -137,6 +150,16 @@ func RenderScenarioReport(rep scenario.Report) {
 			}
 			printedWarnings[varName] = true
 			fmt.Println(warnStyle.Render(fmt.Sprintf("  ⚠ Warning: variable '%s' could not be extracted from JSON response (check JSONPath)", varName)))
+		}
+		if sr.AssertionFailures > 0 {
+			reasons := make([]string, 0, len(sr.FailureReasons))
+			for r := range sr.FailureReasons {
+				reasons = append(reasons, r)
+			}
+			slices.Sort(reasons)
+			for _, r := range reasons {
+				fmt.Println(warnStyle.Render(fmt.Sprintf("  ✗ [%s] Assertion failed (%dx): %s", sr.Name, sr.FailureReasons[r], r)))
+			}
 		}
 	}
 	fmt.Println()

@@ -18,6 +18,7 @@ import (
 
 type scenarioFormModel struct {
 	input     textinput.Model
+	width     int
 	errMsg    string
 	infoMsg   string
 	missing   bool
@@ -37,13 +38,20 @@ func newScenarioFormModel() scenarioFormModel {
 	ti.PlaceholderStyle = MutedStyle
 	ti.Focus()
 
-	return scenarioFormModel{input: ti}
+	return scenarioFormModel{input: ti, width: reporter.TerminalWidth()}
 }
 
 func (m scenarioFormModel) Init() tea.Cmd { return textinput.Blink }
 
 func (m scenarioFormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+			boxW := reporter.ClampBoxWidth(m.width, 86, 44)
+			m.input.Width = max(16, boxW-28)
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if sanitized, wasPaste := sanitizePasteMsg(msg); wasPaste {
 			if len(sanitized.Runes) == 0 {
@@ -112,8 +120,9 @@ func (m scenarioFormModel) View() string {
 		b.WriteString("\n" + ErrorStyle.Render("✗ "+m.errMsg) + "\n")
 	}
 
+	boxW := reporter.ClampBoxWidth(m.width, 86, 44)
 	b.WriteString("\n" + HintStyle.Render("Enter: Run Scenario  •  Ctrl+G: Generate Sample tensgo.yaml  •  Esc: Back"))
-	return "\n" + BoxStyle.Width(86).Render(b.String()) + "\n"
+	return "\n" + BoxStyle.Width(boxW).Render(b.String()) + "\n"
 }
 
 type scenarioTickMsg time.Time
@@ -124,6 +133,7 @@ type scenarioRunModel struct {
 	completed *atomic.Int64
 	startTime time.Time
 	spinner   spinner.Model
+	width     int
 	report    scenario.Report
 	done      bool
 }
@@ -137,6 +147,7 @@ func newScenarioRunModel(cfg *scenario.ParsedConfig, completed *atomic.Int64) sc
 		completed: completed,
 		startTime: time.Now(),
 		spinner:   sp,
+		width:     reporter.TerminalWidth(),
 	}
 }
 
@@ -150,6 +161,11 @@ func (m scenarioRunModel) Init() tea.Cmd {
 
 func (m scenarioRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case scenarioTickMsg:
 		if m.done {
 			return m, nil
@@ -185,7 +201,8 @@ func (m scenarioRunModel) View() string {
 		m.cfg.Duration,
 		lipgloss.NewStyle().Bold(true).Foreground(ColorSuccess).Render(fmt.Sprintf("%d", m.completed.Load())),
 	))
-	return "\n" + BoxStyle.Width(86).Render(b.String()) + "\n"
+	boxW := reporter.ClampBoxWidth(m.width, 86, 44)
+	return "\n" + BoxStyle.Width(boxW).Render(b.String()) + "\n"
 }
 
 // RunScenarioView prompts for a YAML scenario file and executes it via TUI.
@@ -212,9 +229,21 @@ func RunScenarioFile(path string, noTUI bool) error {
 
 // RunScenarioFileWithReport parses and executes a scenario YAML file and returns an HTML exporter.
 func RunScenarioFileWithReport(path string, noTUI bool) (func(string) error, error) {
-	cfg, err := scenario.ParseFile(path)
+	rep, err := RunScenarioReport(path, noTUI)
 	if err != nil {
 		return nil, err
+	}
+	saveFn := func(outPath string) error {
+		return reporter.GenerateHTMLSummaryReport(outPath, "SCENARIO", fmt.Sprintf("%s (%s)", rep.Name, rep.BaseURL), rep.Overall)
+	}
+	return saveFn, nil
+}
+
+// RunScenarioReport parses and executes a scenario YAML file and returns the full Report.
+func RunScenarioReport(path string, noTUI bool) (scenario.Report, error) {
+	cfg, err := scenario.ParseFile(path)
+	if err != nil {
+		return scenario.Report{}, err
 	}
 
 	fi, statErr := os.Stdout.Stat()
@@ -231,7 +260,7 @@ func RunScenarioFileWithReport(path string, noTUI bool) (func(string) error, err
 		}()
 		endModel, err := prog.Run()
 		if err != nil {
-			return nil, err
+			return scenario.Report{}, err
 		}
 		rep = endModel.(scenarioRunModel).report
 	} else {
@@ -239,8 +268,5 @@ func RunScenarioFileWithReport(path string, noTUI bool) (func(string) error, err
 	}
 
 	reporter.RenderScenarioReport(rep)
-	saveFn := func(outPath string) error {
-		return reporter.GenerateHTMLSummaryReport(outPath, "SCENARIO", fmt.Sprintf("%s (%s)", rep.Name, rep.BaseURL), rep.Overall)
-	}
-	return saveFn, nil
+	return rep, nil
 }

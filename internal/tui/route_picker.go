@@ -20,6 +20,7 @@ import (
 type openAPIScanForm struct {
 	inputs    []textinput.Model
 	focusIdx  int
+	width     int
 	errMsg    string
 	submitted bool
 	cancelled bool
@@ -61,13 +62,22 @@ func newOpenAPIScanForm() openAPIScanForm {
 		inputs[i].PlaceholderStyle = MutedStyle
 	}
 
-	return openAPIScanForm{inputs: inputs}
+	return openAPIScanForm{inputs: inputs, width: reporter.TerminalWidth()}
 }
 
 func (m openAPIScanForm) Init() tea.Cmd { return textinput.Blink }
 
 func (m openAPIScanForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+			boxW := reporter.ClampBoxWidth(m.width, 80, 42)
+			inW := max(16, boxW-28)
+			m.inputs[0].Width = inW
+			m.inputs[1].Width = inW
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if sanitized, wasPaste := sanitizePasteMsg(msg); wasPaste {
 			if len(sanitized.Runes) == 0 {
@@ -141,8 +151,9 @@ func (m openAPIScanForm) View() string {
 	if m.errMsg != "" {
 		b.WriteString("\n" + ErrorStyle.Render("✗ "+m.errMsg) + "\n")
 	}
+	boxW := reporter.ClampBoxWidth(m.width, 80, 42)
 	b.WriteString("\n" + HintStyle.Render("Tab/↑/↓: Navigate  •  Enter: Parse Schema  •  Esc: Back"))
-	return "\n" + BoxStyle.Width(80).Render(b.String()) + "\n"
+	return "\n" + BoxStyle.Width(boxW).Render(b.String()) + "\n"
 }
 
 // RunOpenAPIScanForm prompts the user for an OpenAPI spec source and test parameters.
@@ -176,7 +187,7 @@ func newRoutePickerModel(spec *openapi.Spec) routePickerModel {
 	return routePickerModel{
 		spec:     spec,
 		selected: make(map[int]bool, len(spec.Endpoints)),
-		width:    92,
+		width:    reporter.TerminalWidth(),
 	}
 }
 
@@ -281,13 +292,7 @@ func (m routePickerModel) View() string {
 		end = len(m.spec.Endpoints)
 	}
 
-	boxWidth := m.width - 4
-	if boxWidth > 104 {
-		boxWidth = 104
-	}
-	if boxWidth < 50 {
-		boxWidth = 50
-	}
+	boxWidth := reporter.ClampBoxWidth(m.width, 104, 48)
 	// BoxStyle border (2) + horizontal padding (4) + extra safety margin (8) = 14,
 	// plus fixed prefix ("▸ [x] METHOD " = 13 chars).
 	baseAvail := boxWidth - 14 - 13
@@ -514,6 +519,7 @@ type authPromptModel struct {
 	loginFields    []string
 	manualInput    textinput.Model
 	focusIdx       int
+	width          int
 	errMsg         string
 	token          string
 	skipped        bool
@@ -576,6 +582,7 @@ func newAuthPromptModel(spec *openapi.Spec, protectedCount int, timeout time.Dur
 		loginInputs:    loginInputs,
 		loginFields:    fields,
 		manualInput:    manual,
+		width:          reporter.TerminalWidth(),
 	}
 }
 
@@ -583,6 +590,17 @@ func (m authPromptModel) Init() tea.Cmd { return textinput.Blink }
 
 func (m authPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+			boxW := reporter.ClampBoxWidth(m.width, 86, 44)
+			inW := max(16, boxW-28)
+			m.manualInput.Width = inW
+			for i := range m.loginInputs {
+				m.loginInputs[i].Width = inW
+			}
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if sanitized, wasPaste := sanitizePasteMsg(msg); wasPaste {
 			if len(sanitized.Runes) == 0 {
@@ -724,9 +742,10 @@ func (m authPromptModel) View() string {
 	if m.spec.LoginEndpoint != nil {
 		hints += "  •  Ctrl+T: Toggle Manual Token / Auto-Login"
 	}
+	boxW := reporter.ClampBoxWidth(m.width, 86, 44)
 	b.WriteString("\n" + HintStyle.Render(hints))
 
-	return "\n" + BoxStyle.Width(86).Render(b.String()) + "\n"
+	return "\n" + BoxStyle.Width(boxW).Render(b.String()) + "\n"
 }
 
 func runAuthPrompt(spec *openapi.Spec, protectedCount int, timeout time.Duration) (string, bool) {

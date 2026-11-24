@@ -34,6 +34,7 @@ type chaosFormModel struct {
 	profileIdx int
 	inputs     []textinput.Model
 	focusIdx   int
+	width      int
 	errMsg     string
 	submitted  bool
 	cancelled  bool
@@ -75,13 +76,22 @@ func newChaosFormModel() chaosFormModel {
 		inputs[i].PlaceholderStyle = MutedStyle
 	}
 
-	return chaosFormModel{inputs: inputs}
+	return chaosFormModel{inputs: inputs, width: reporter.TerminalWidth()}
 }
 
 func (m chaosFormModel) Init() tea.Cmd { return textinput.Blink }
 
 func (m chaosFormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+			boxW := reporter.ClampBoxWidth(m.width, 86, 44)
+			inW := max(16, boxW-28)
+			m.inputs[0].Width = inW
+			m.inputs[3].Width = inW
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if sanitized, wasPaste := sanitizePasteMsg(msg); wasPaste {
 			if len(sanitized.Runes) == 0 {
@@ -223,8 +233,9 @@ func (m chaosFormModel) View() string {
 		b.WriteString("\n" + ErrorStyle.Render("✗ "+m.errMsg) + "\n")
 	}
 
+	boxW := reporter.ClampBoxWidth(m.width, 86, 44)
 	b.WriteString("\n" + HintStyle.Render("←/→: Switch Profile  •  Tab/↑/↓: Navigate  •  Enter: Start  •  Esc: Back"))
-	return "\n" + BoxStyle.Width(86).Render(b.String()) + "\n"
+	return "\n" + BoxStyle.Width(boxW).Render(b.String()) + "\n"
 }
 
 type chaosTickMsg time.Time
@@ -234,6 +245,7 @@ type chaosRunModel struct {
 	runner  *profiles.Runner
 	cancel  context.CancelFunc
 	spinner spinner.Model
+	width   int
 	report  profiles.Report
 	done    bool
 }
@@ -246,6 +258,7 @@ func newChaosRunModel(runner *profiles.Runner, cancel context.CancelFunc) chaosR
 		runner:  runner,
 		cancel:  cancel,
 		spinner: sp,
+		width:   reporter.TerminalWidth(),
 	}
 }
 
@@ -259,6 +272,11 @@ func (m chaosRunModel) Init() tea.Cmd {
 
 func (m chaosRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" || msg.String() == "esc" {
 			m.cancel()
@@ -302,8 +320,9 @@ func (m chaosRunModel) View() string {
 		TextStyle.Render(metrics.FormatDuration(snap.CurrentP95)),
 		TextStyle.Render(fmt.Sprintf("%.2f%%", snap.CurrentErrPct)),
 	))
+	boxW := reporter.ClampBoxWidth(m.width, 80, 44)
 	b.WriteString(HintStyle.Render("Ctrl+C / Esc: Stop safely"))
-	return "\n" + BoxStyle.Width(80).Render(b.String()) + "\n"
+	return "\n" + BoxStyle.Width(boxW).Render(b.String()) + "\n"
 }
 
 func renderChaosReport(cfg profiles.Config, rep profiles.Report) {
@@ -361,8 +380,9 @@ func renderChaosReport(cfg profiles.Config, rep profiles.Report) {
 		b.WriteString(fmt.Sprintf("Latency Degradation : %s\n", degStyle.Render(fmt.Sprintf("%+.1f%%", rep.DegradationPct))))
 	}
 
+	boxW := reporter.ClampBoxWidth(reporter.TerminalWidth(), 86, 44)
 	fmt.Println()
-	fmt.Println(BoxStyle.Width(86).Render(b.String()))
+	fmt.Println(BoxStyle.Width(boxW).Render(b.String()))
 	fmt.Println()
 }
 

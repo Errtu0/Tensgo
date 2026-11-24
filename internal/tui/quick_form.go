@@ -11,11 +11,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Errtu0/tensgo/internal/engine"
+	"github.com/Errtu0/tensgo/internal/reporter"
 )
 
 type quickFormModel struct {
 	inputs    []textinput.Model
 	focusIdx  int
+	width     int
 	errMsg    string
 	submitted bool
 	cancelled bool
@@ -70,7 +72,7 @@ func newQuickFormModel() quickFormModel {
 		inputs[i].PlaceholderStyle = MutedStyle
 	}
 
-	return quickFormModel{inputs: inputs}
+	return quickFormModel{inputs: inputs, width: reporter.TerminalWidth()}
 }
 
 func (m quickFormModel) Init() tea.Cmd {
@@ -79,6 +81,16 @@ func (m quickFormModel) Init() tea.Cmd {
 
 func (m quickFormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+			boxW := reporter.ClampBoxWidth(m.width, 76, 40)
+			inW := max(16, boxW-28)
+			m.inputs[0].Width = inW
+			m.inputs[4].Width = inW
+			m.inputs[5].Width = inW
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if sanitized, wasPaste := sanitizePasteMsg(msg); wasPaste {
 			if len(sanitized.Runes) == 0 {
@@ -205,9 +217,10 @@ func (m quickFormModel) View() string {
 		b.WriteString("\n" + ErrorStyle.Render("✗ "+m.errMsg) + "\n")
 	}
 
+	boxW := reporter.ClampBoxWidth(m.width, 76, 40)
 	b.WriteString("\n" + HintStyle.Render("Tab/↑/↓: Navigate  •  Enter: Start Test  •  Esc: Back to Menu"))
 
-	return "\n" + BoxStyle.Width(76).Render(b.String()) + "\n"
+	return "\n" + BoxStyle.Width(boxW).Render(b.String()) + "\n"
 }
 
 // RunQuickForm displays the interactive quick stress test form and returns the resulting config.
