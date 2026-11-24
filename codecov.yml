@@ -12,6 +12,7 @@ coverage:
         target: 75%
 
 ignore:
+  - "main.go"
   - "internal/tui/**"
   - "examples/**"
   - "benchmarks/**"
