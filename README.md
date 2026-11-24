@@ -2,7 +2,7 @@
 
 **Autonomous API Stress Testing & Bottleneck Discovery Engine** — *by Larch Studios*
 
-[![Version](https://img.shields.io/badge/version-v0.3.0-DE8B4B?style=flat-square)](https://github.com/Errtu0/tensgo/releases)
+[![Version](https://img.shields.io/badge/version-v0.3.1-DE8B4B?style=flat-square)](https://github.com/Errtu0/tensgo/releases)
 [![Go](https://img.shields.io/badge/go-1.24+-6B8E7A?style=flat-square)](https://go.dev/)
 [![codecov](https://codecov.io/gh/Errtu0/tensgo/branch/main/graph/badge.svg)](https://codecov.io/gh/Errtu0/tensgo)
 [![License: MIT](https://img.shields.io/badge/license-MIT-ECEAE6?style=flat-square)](./LICENSE)
